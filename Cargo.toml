@@ -2,7 +2,13 @@
 name = "focusbar"
 version = "0.1.0"
 edition = "2021"
-description = "Menu bar focus timer: 30 min focus / 5 min break, auto-pause, countdown in the menu bar"
+description = "极简 macOS 菜单栏专注计时器：30 分钟专注 / 5 分钟休息，自动暂停，零窗口"
+authors = ["xqh-jason"]
+license = "MIT"
+repository = "https://github.com/xqh-jason/focusbar"
+readme = "README.md"
+keywords = ["macos", "menubar", "pomodoro", "timer", "tauri"]
+categories = ["gui"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

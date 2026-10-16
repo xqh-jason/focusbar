@@ -6,16 +6,18 @@ cd "$(dirname "$0")"
 cargo build --release
 
 APP="target/FocusBar.app"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+TMP="$APP.tmp.$$"
+rm -rf "$TMP"
+trap 'rm -rf "$TMP"' EXIT
 
-# 图标：png -> icns
-ICNS="$APP/Contents/Resources/AppIcon.icns"
-sips -s format icns icons/icon.png --out "$ICNS" >/dev/null
+mkdir -p "$TMP/Contents/MacOS" "$TMP/Contents/Resources"
 
-cp target/release/focusbar "$APP/Contents/MacOS/focusbar"
+# 图标：png -> icns（失败直接中断，免得产出半个 bundle）
+sips -s format icns icons/icon.png --out "$TMP/Contents/Resources/AppIcon.icns" >/dev/null
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cp target/release/focusbar "$TMP/Contents/MacOS/focusbar"
+
+cat > "$TMP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -37,6 +39,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "提示：本地 ad-hoc 签名失败，不影响本机运行"
+codesign --force --sign - "$TMP" >/dev/null 2>&1 || echo "提示：本地 ad-hoc 签名失败，不影响本机运行"
+
+# 全部成功后再原子替换，避免半成品留在 target/ 里
+rm -rf "$APP"
+mv "$TMP" "$APP"
+trap - EXIT
 
 echo "已生成：$(pwd)/$APP"
