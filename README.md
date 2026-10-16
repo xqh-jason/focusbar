@@ -12,13 +12,19 @@
 ./install.sh --uninstall
 ```
 
-装好后菜单栏会出现倒计时：运行中显示 `29:59`，暂停时显示 `29:59 ⏸`。
+装好后菜单栏会出现倒计时。为了把 CPU 压到接近 0，显示分两种精度：
+
+- **计时中**：平时只显示整分钟（`30m` → `29m` → …），**最后一分钟**自动切成逐秒（`00:59` → `00:00`）
+- **暂停时**：直接给全精度 mm:ss（`30:00 ⏸`），反正不刷新，不花 CPU
+
+想要全程逐秒 mm:ss（好看，代价约 0.9% 单核），用 `FOCUSBAR_PRECISE_TITLE=1` 启动。
+
 点它弹出菜单：
 
 | 菜单项 | 作用 |
 | --- | --- |
 | 开始 / 暂停 | 开始或暂停当前这一轮 |
-| 已暂停 · 专注 · 30:00 · 已完成 N 轮专注 | 只读状态行 |
+| 计时中 · 专注 · 29m · 已完成 N 轮专注 | 只读状态行 |
 | 专注 30 分钟 | 切到专注阶段（按当前是否在计时决定继续跑还是停着） |
 | 休息 5 分钟 | 切到休息阶段 |
 | 重置本轮 | 把当前阶段的时间归零重来 |
@@ -26,6 +32,8 @@
 
 一轮结束时：播放系统提示音 + 一条通知，然后**自动暂停**，等你点「开始」才进下一轮。
 计时按墙钟推进，合盖/睡眠期间照常走，醒来显示的剩余时间是对的。
+
+只允许一个实例运行（Unix socket 占位）：重复启动会直接退出，不会在菜单栏出现两个倒计时。
 
 ## 自测用的环境变量
 
@@ -36,14 +44,21 @@ FOCUSBAR_FOCUS_SECS=45 FOCUSBAR_BREAK_SECS=10 FOCUSBAR_AUTOSTART=1 \
 
 - `FOCUSBAR_FOCUS_SECS` / `FOCUSBAR_BREAK_SECS`：覆盖阶段时长（秒），菜单文案也跟着变
 - `FOCUSBAR_AUTOSTART=1`：启动即开始计时
+- `FOCUSBAR_PRECISE_TITLE=1`：菜单栏全程逐秒 mm:ss（不省 CPU）
+
+## 为什么 CPU 能压到 0
+
+每次改菜单栏文本，AppKit 都会走一次 CoreAnimation 提交 + 到 WindowServer 的 XPC（`sample` 采样里能看到
+`CA::Transaction::commit` → BaseBoard），实测**每次约 9ms**。逐秒刷就等于每秒烧 9ms。
+
+所以：只在显示字符串真的会变时才调 AppKit，且让计时中的字符串一分钟才变一次（细节见上面的显示模式）。
+暂停时不刷新，CPU 也是 0。
 
 ## 为什么内存能压到这么低
 
 不创建任何窗口 —— 不创建 window，tauri/wry 就不会拉起 WKWebView，也就没有
 `WebKit.WebContent` / `WebKit.GPU` / `WebKit.Networking` 这三个辅助进程。
 整个应用只有一个进程：Rust + AppKit 的菜单栏项。
-
-另外每秒只在「要显示的文本真的变了」时才调 AppKit 改菜单栏，暂停状态下 CPU 为 0。
 
 ## 实测数据（本机 macOS 27.0.1，同日同机对比）
 
@@ -52,12 +67,14 @@ FOCUSBAR_FOCUS_SECS=45 FOCUSBAR_BREAK_SECS=10 FOCUSBAR_AUTOSTART=1 \
 | 进程数 | 4（主进程 + WebContent + GPU + Networking） | 1 |
 | 物理内存合计 | 169 MB（36 + 109 + 15 + 9） | 23 MB |
 | RSS 合计 | 约 103 MB（波动，参考值） | 90 MB（含共享框架，参考值） |
-| 计时中 CPU | ≈ 0.03%（几乎为 0） | ≈ 1%（单核，每秒刷新菜单栏文本所致） |
+| 计时中 CPU（默认省 CPU 模式） | ≈ 0.03% | 0.00%（60 秒窗口测不到，只有整分钟边界有一次刷新） |
+| 计时中 CPU（最后一分钟逐秒 / PRECISE_TITLE=1） | ≈ 0.03% | 0.92% |
 | 暂停时 CPU | ≈ 0 | 0 |
 | App 体积 | 24 MB（其中 19 MB 是网页资源） | 7.5 MB |
 | 网络 | 启动时校验 App Store 收据，含升级/内购弹窗逻辑 | 零网络 |
 
-物理内存用 `footprint -p <pid>` 测，RSS 用 `ps -o rss`（RSS 会把共享框架算进去，偏大）。
+CPU 是 `ps -o cputime` 前后差除以 60 秒窗口算出来的（`ps -o %cpu` 是生命周期均值，不能用）；
+物理内存用 `footprint -p <pid>`，RSS 用 `ps -o rss`（RSS 会把共享框架算进去，偏大）。
 
 ## 开发
 

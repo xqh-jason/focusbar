@@ -161,11 +161,26 @@ impl Timer {
         format!("{:02}:{:02}", self.remaining / 60, self.remaining % 60)
     }
 
-    fn menu_title(&self) -> String {
-        if self.running() {
+    /// 菜单栏显示文本。默认走「省 CPU」模式：
+    /// 每改一次菜单栏文本都会触发一次 CoreAnimation + WindowServer 的 XPC 提交（实测约 9ms），
+    /// 所以只在字符串真的会变时才刷新 —— 非最后一分钟只显示整分钟（29m → 28m …），
+    /// 最后一分钟才逐秒（01:00 → 00:00）。暂停时直接给全精度 mm:ss，反正不刷新。
+    /// FOCUSBAR_PRECISE_TITLE=1 可强制全程逐秒（好看，代价约 1% 单核）。
+    fn display(&self) -> String {
+        static PRECISE: OnceLock<bool> = OnceLock::new();
+        let precise = *PRECISE.get_or_init(|| std::env::var("FOCUSBAR_PRECISE_TITLE").is_ok());
+        if precise || !self.running() || self.remaining <= 60 {
             self.clock()
         } else {
-            format!("{} ⏸", self.clock())
+            format!("{}m", self.remaining / 60)
+        }
+    }
+
+    fn menu_title(&self) -> String {
+        if self.running() {
+            self.display()
+        } else {
+            format!("{} ⏸", self.display())
         }
     }
 
@@ -178,7 +193,7 @@ impl Timer {
                 "已暂停"
             },
             self.phase.label(),
-            self.clock(),
+            self.display(),
             self.done_focus
         )
     }
