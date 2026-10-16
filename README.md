@@ -12,19 +12,17 @@
 ./install.sh --uninstall
 ```
 
-装好后菜单栏会出现倒计时。为了把 CPU 压到接近 0，显示分两种精度：
+装好后菜单栏会出现倒计时：计时中显示 `29:59` 并逐秒走，暂停时显示 `29:59 ⏸`。
 
-- **计时中**：平时只显示整分钟（`30m` → `29m` → …），**最后一分钟**自动切成逐秒（`00:59` → `00:00`）
-- **暂停时**：直接给全精度 mm:ss（`30:00 ⏸`），反正不刷新，不花 CPU
-
-想要全程逐秒 mm:ss（好看，代价约 0.9% 单核），用 `FOCUSBAR_PRECISE_TITLE=1` 启动。
+每次改菜单栏文本都要走一次 CoreAnimation + WindowServer 的 XPC（实测约 9ms），所以逐秒刷的代价是
+约 1% 单核。想省掉它就用 `FOCUSBAR_ECONOMY_TITLE=1` 启动：平时只显示整分钟（`29m`），最后一分钟才逐秒。
 
 点它弹出菜单：
 
 | 菜单项 | 作用 |
 | --- | --- |
 | 开始 / 暂停 | 开始或暂停当前这一轮 |
-| 计时中 · 专注 · 29m · 已完成 N 轮专注 | 只读状态行 |
+| 计时中 · 专注 · 29:59 · 已完成 N 轮专注 | 只读状态行 |
 | 专注 30 分钟 | 切到专注阶段（按当前是否在计时决定继续跑还是停着） |
 | 休息 5 分钟 | 切到休息阶段 |
 | 重置本轮 | 把当前阶段的时间归零重来 |
@@ -44,15 +42,16 @@ FOCUSBAR_FOCUS_SECS=45 FOCUSBAR_BREAK_SECS=10 FOCUSBAR_AUTOSTART=1 \
 
 - `FOCUSBAR_FOCUS_SECS` / `FOCUSBAR_BREAK_SECS`：覆盖阶段时长（秒），菜单文案也跟着变
 - `FOCUSBAR_AUTOSTART=1`：启动即开始计时
-- `FOCUSBAR_PRECISE_TITLE=1`：菜单栏全程逐秒 mm:ss（不省 CPU）
+- `FOCUSBAR_ECONOMY_TITLE=1`：菜单栏平时只显示整分钟（省约 1% 单核）
 
-## 为什么 CPU 能压到 0
+## CPU 与内存
+
+### 为什么 CPU 是 1%
 
 每次改菜单栏文本，AppKit 都会走一次 CoreAnimation 提交 + 到 WindowServer 的 XPC（`sample` 采样里能看到
-`CA::Transaction::commit` → BaseBoard），实测**每次约 9ms**。逐秒刷就等于每秒烧 9ms。
-
-所以：只在显示字符串真的会变时才调 AppKit，且让计时中的字符串一分钟才变一次（细节见上面的显示模式）。
-暂停时不刷新，CPU 也是 0。
+`CA::Transaction::commit` → BaseBoard），实测**每次约 9ms**。逐秒刷 mm:ss 就等于每秒烧 9ms ≈ 1% 单核。
+这已经是最省的实现：文本没变就不调 AppKit（暂停态因此是 0%）。真要再降只能牺牲秒数精度，见
+`FOCUSBAR_ECONOMY_TITLE`。
 
 ## 为什么内存能压到这么低
 
@@ -67,8 +66,8 @@ FOCUSBAR_FOCUS_SECS=45 FOCUSBAR_BREAK_SECS=10 FOCUSBAR_AUTOSTART=1 \
 | 进程数 | 4（主进程 + WebContent + GPU + Networking） | 1 |
 | 物理内存合计 | 169 MB（36 + 109 + 15 + 9） | 23 MB |
 | RSS 合计 | 约 103 MB（波动，参考值） | 90 MB（含共享框架，参考值） |
-| 计时中 CPU（默认省 CPU 模式） | ≈ 0.03% | 0.00%（60 秒窗口测不到，只有整分钟边界有一次刷新） |
-| 计时中 CPU（最后一分钟逐秒 / PRECISE_TITLE=1） | ≈ 0.03% | 0.92% |
+| 计时中 CPU（默认，逐秒 mm:ss） | ≈ 0.03% | 0.92% |
+| 计时中 CPU（`FOCUSBAR_ECONOMY_TITLE=1`，平时整分钟） | — | 0.00%（60 秒窗口里只剩整分钟边界那一次刷新） |
 | 暂停时 CPU | ≈ 0 | 0 |
 | App 体积 | 24 MB（其中 19 MB 是网页资源） | 7.5 MB |
 | 网络 | 启动时校验 App Store 收据，含升级/内购弹窗逻辑 | 零网络 |
