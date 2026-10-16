@@ -252,7 +252,46 @@ fn refresh(app: &AppHandle) {
     }
 }
 
+/// 单实例保护：菜单栏应用起两个实例，顶部就会出现两个倒计时。
+/// 用 Unix socket 占位（不引入额外依赖）：绑定成功=拿到所有权；已存在时先试着连接，
+/// 连得上说明真有实例在跑，连不上说明是上次异常退出留下的死文件，删掉重绑。
+fn claim_single_instance() -> bool {
+    use std::os::unix::net::{UnixListener, UnixStream};
+    let Ok(home) = std::env::var("HOME") else {
+        return true;
+    };
+    let dir = std::path::PathBuf::from(home).join("Library/Application Support/FocusBar");
+    let _ = std::fs::create_dir_all(&dir);
+    let sock = dir.join("focusbar.sock");
+    match UnixListener::bind(&sock) {
+        Ok(listener) => {
+            // 故意泄漏：进程活多久，socket 就占多久
+            Box::leak(Box::new(listener));
+            true
+        }
+        Err(_) => {
+            if UnixStream::connect(&sock).is_ok() {
+                false
+            } else {
+                let _ = std::fs::remove_file(&sock);
+                match UnixListener::bind(&sock) {
+                    Ok(listener) => {
+                        Box::leak(Box::new(listener));
+                        true
+                    }
+                    Err(_) => true,
+                }
+            }
+        }
+    }
+}
+
 fn main() {
+    if !claim_single_instance() {
+        println!("[focusbar] 已有实例在运行，本进程退出");
+        return;
+    }
+
     tauri::Builder::default()
         .setup(|app| {
             // 不占 Dock、不抢焦点，纯菜单栏进程

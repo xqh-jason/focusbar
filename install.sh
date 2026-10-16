@@ -23,9 +23,10 @@ mkdir -p "$HOME/Applications"
 rm -rf "$DEST"
 cp -R target/FocusBar.app "$DEST"
 
+# 先停掉所有已有实例（含 LaunchAgent 里的），避免菜单栏出现两个倒计时
+launchctl bootout "gui/$(id -u)/com.xqh.focusbar" 2>/dev/null || true
 pkill -f 'FocusBar.app/Contents/MacOS/focusbar' 2>/dev/null || true
 sleep 1
-open "$DEST"
 
 if [[ "${1:-}" == "--login" ]]; then
   mkdir -p "$(dirname "$AGENT")"
@@ -42,9 +43,11 @@ if [[ "${1:-}" == "--login" ]]; then
 </dict>
 </plist>
 PLIST
-  launchctl bootout "gui/$(id -u)/com.xqh.focusbar" 2>/dev/null || true
+  # 交给 launchd 启动，别再 open，否则会起第二个实例
   launchctl bootstrap "gui/$(id -u)" "$AGENT"
   echo "已设置登录自启"
+else
+  open "$DEST"
 fi
 
 echo "已安装并启动：$DEST"
