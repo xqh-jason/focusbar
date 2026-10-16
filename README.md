@@ -50,8 +50,8 @@ FOCUSBAR_FOCUS_SECS=45 FOCUSBAR_BREAK_SECS=10 FOCUSBAR_AUTOSTART=1 \
 | 指标 | WebPomodoro 6.9（原生 Swift + WKWebView） | FocusBar（Tauri，纯菜单栏） |
 | --- | --- | --- |
 | 进程数 | 4（主进程 + WebContent + GPU + Networking） | 1 |
-| 物理内存合计 | 165 MB（36 + 96 + 24 + 9） | 24 MB |
-| RSS 合计 | 约 116 MB | 90 MB（含共享框架，参考值） |
+| 物理内存合计 | 169 MB（36 + 109 + 15 + 9） | 23 MB |
+| RSS 合计 | 约 103 MB（波动，参考值） | 90 MB（含共享框架，参考值） |
 | 计时中 CPU | ≈ 0.03%（几乎为 0） | ≈ 1%（单核，每秒刷新菜单栏文本所致） |
 | 暂停时 CPU | ≈ 0 | 0 |
 | App 体积 | 24 MB（其中 19 MB 是网页资源） | 7.5 MB |
