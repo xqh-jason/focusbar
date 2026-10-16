@@ -1,0 +1,14 @@
+[package]
+name = "focusbar"
+version = "0.1.0"
+edition = "2021"
+description = "Menu bar focus timer: 30 min focus / 5 min break, auto-pause, countdown in the menu bar"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+
+[profile.release]
+strip = true
